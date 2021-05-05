@@ -683,19 +683,6 @@ kvfs_file_handle * MetaFS::InitFileHandle(const char * path, struct fuse_file_in
            const tfs_inode_header *header = reinterpret_cast<const tfs_inode_header *>(value.data());
            if(header->has_blob > 0) // for big file , fill fd 
            {
-              // daos_handle_t oh;
-              // daos_obj_id_t oid;
-              // int ret;
-
-              // config_->GetDaosObjId(&oid, key);
-              // // ret = daos_obj_open(config_->coh, oid, DAOS_OO_RO, &oh, NULL);
-              // KVFS_LOG("daos_array_open_with_attr");
-              // ret = daos_array_open_with_attr(config_->coh, oid, DAOS_TX_NONE, DAOS_OO_RW, 1, FS_DEFAULT_CHUNK_SIZE, &oh, NULL);
-              // if(ret != 0){
-              //   KVFS_LOG("error");
-              // }
-              // handle->fd = 1;
-              // handle->oh = oh;
               handle->fd = 1;
            }
            else // small file or dir 
@@ -1323,39 +1310,6 @@ int MetaFS::ReleaseDir(const char * path,struct fuse_file_info * fi){
   return 0;
 }
 
-// //zzy:TODO这个函数写的有问题：不应该只删除dir吧,参考daos的remove_dir_contents
-// int MetaFS::RemoveDir(const char * path){
-//   //感觉要删除整个目录的所有文件
-//   KVFS_LOG("RemoveDir:%s", path);
-//   inode_id_t key;
-//   inode_id_t parent_id;
-//   string fname;
-//   if (!PathLookup(path, key, parent_id, fname)) {
-//     KVFS_LOG("Unlink: No such file or directory %s\n", path);
-//     return -errno;
-//   }
-//   std::string value;
-//   int ret = 0;
-//   ret = db_->InodeGet(key, value);
-//   if(ret == 0){
-//     kvfs_file_handle::DeleteHandle(key);
-//     int ret = db_->DirDelete(parent_id, fname);
-//     if(ret != 0){
-//       return -EDBERROR;
-//     }
-//     ret = db_->InodeDelete(key);
-//     if(ret != 0){
-//       return -EDBERROR;
-//     }
-
-//     return 0;
-//   } else if(ret == 1){
-//     return -ENOENT;
-//   } else{
-//     return -EDBERROR;
-//   }
-// }
-
 //zzy:TODO这个函数写的有问题：不应该只删除dir吧,参考daos的remove_dir_contents
 int MetaFS::RemoveDir(const char * path){
   //感觉要删除整个目录的所有文件
@@ -1370,16 +1324,6 @@ int MetaFS::RemoveDir(const char * path){
   std::string value;
   int ret = 0;
   ret = db_->InodeGet(key, value);
-  //解析出stat
-  const tfs_stat_t* inode_value = GetAttribute(value);
-  //如果是目录，递归删除
-  if(S_ISDIR(inode_value->st_mode)) {
-    ret = RemoveDirContents(key);
-  } else {
-    KVFS_LOG("RemoveDir:%s is not a dir!", path);
-    return 0;
-  }
-  
   if(ret == 0){
     kvfs_file_handle::DeleteHandle(key);
     int ret = db_->DirDelete(parent_id, fname);
@@ -1397,8 +1341,51 @@ int MetaFS::RemoveDir(const char * path){
   } else{
     return -EDBERROR;
   }
-  
 }
+
+// //zzy:TODO这个函数写的有问题：不应该只删除dir吧,参考daos的remove_dir_contents
+// int MetaFS::RemoveDir(const char * path){
+//   //感觉要删除整个目录的所有文件
+//   KVFS_LOG("RemoveDir:%s", path);
+//   inode_id_t key;
+//   inode_id_t parent_id;
+//   string fname;
+//   if (!PathLookup(path, key, parent_id, fname)) {
+//     KVFS_LOG("Unlink: No such file or directory %s\n", path);
+//     return -errno;
+//   }
+//   std::string value;
+//   int ret = 0;
+//   ret = db_->InodeGet(key, value);
+//   //解析出stat
+//   const tfs_stat_t* inode_value = GetAttribute(value);
+//   //如果是目录，递归删除
+//   if(S_ISDIR(inode_value->st_mode)) {
+//     ret = RemoveDirContents(key);
+//   } else {
+//     KVFS_LOG("RemoveDir:%s is not a dir!", path);
+//     return 0;
+//   }
+  
+//   if(ret == 0){
+//     kvfs_file_handle::DeleteHandle(key);
+//     int ret = db_->DirDelete(parent_id, fname);
+//     if(ret != 0){
+//       return -EDBERROR;
+//     }
+//     ret = db_->InodeDelete(key);
+//     if(ret != 0){
+//       return -EDBERROR;
+//     }
+
+//     return 0;
+//   } else if(ret == 1){
+//     return -ENOENT;
+//   } else{
+//     return -EDBERROR;
+//   }
+  
+// }
 
 int MetaFS::RemoveDirContents(inode_id_t parent_id) {
   int ret = 0;
