@@ -1099,10 +1099,29 @@ int MetaFS::Readlink(const char * path ,char * buf,size_t size){
   }
 }
 
-//zzy:TODO
+//zzy
 int MetaFS::Symlink(const char * target , const char * path){
-  KVFS_LOG("Symlink:not implement");
-  return -ENOTIMPLEMENT;
+  // KVFS_LOG("Symlink:not implement");
+  // return -ENOTIMPLEMENT;
+  KVFS_LOG("Symlink: path:%s, target:%s.", path, target);
+  inode_id_t key;
+  inode_id_t parent_id;
+  string fname;
+  if (!PathLookup(path, key, parent_id, fname)) {
+    KVFS_LOG("Symlink: No such file or directory %s\n", path);
+    return -errno;
+  }
+  std::string value;
+  int ret = 0;
+  ret = db_->InodeGet(key, value);
+  if(ret == 0){
+    UpdateInlineData(value, target, 0, strlen(target));
+    ret = db_->InodePut(key.ToSlice(), value);
+    if(ret != 0){
+      return -EDBERROR;
+    }
+  }
+  return ret;
 }
 
 //zzy:删除文件

@@ -1006,9 +1006,27 @@ int RocksFS::Readlink(const char * path ,char * buf,size_t size){
   }
 }
 
+//path对应的value中存储target
 int RocksFS::Symlink(const char * target , const char * path){
-  KVFS_LOG("Symlink:not implement%s %s", target, path);
-  return -ENOTIMPLEMENT;
+  // KVFS_LOG("Symlink:not implement%s %s", target, path);
+  // return -ENOTIMPLEMENT;
+  KVFS_LOG("Symlink: path:%s, target:%s.", path, target);
+  tfs_meta_key_t key;
+  if (!PathLookup(path, key)) {
+    KVFS_LOG("Symlink: No such file or directory %s", path);
+    return -errno;
+  }
+  std::string value;
+  int ret = 0;
+  ret = db_->Get(key.ToSlice(), value);
+  if(ret == 0){
+    UpdateInlineData(value, target, 0, strlen(target));
+    ret = db_->Put(key.ToSlice(), value);
+    if(ret != 0){
+      return -EDBERROR;
+    }
+  }
+  return ret;
 }
 
 int RocksFS::Unlink(const char * path){
