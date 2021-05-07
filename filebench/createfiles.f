@@ -5,7 +5,7 @@
 #
 
 set $dir=/mnt/pmem0/zzy/fs/mnt
-set $nfiles=100000
+set $nfiles=500000
 set $meandirwidth=10
 set $meanfilesize=1k
 set $iosize=1k

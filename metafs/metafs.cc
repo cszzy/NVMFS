@@ -417,7 +417,7 @@ ssize_t MetaFS::MigrateDaosFileToBuffer(const inode_id_t &key, char* buffer, siz
   }
 
   // ret = daos_obj_punch(oh, DAOS_TX_NONE, 0, NULL);
-  ret = daos_array_destroy(oh, Dao-DAOS_TX_NONE, NULL);
+  ret = daos_array_destroy(oh, DAOS_TX_NONE, NULL);
   if(ret){
     daos_array_close(oh, NULL);
     KVFS_LOG("error");
@@ -1103,7 +1103,7 @@ int MetaFS::Symlink(const char * target , const char * path){
   ret = db_->InodeGet(key, value);
   if(ret == 0){
     UpdateInlineData(value, target, 0, strlen(target));
-    ret = db_->InodePut(key.ToSlice(), value);
+    ret = db_->InodePut(key, value);
     if(ret != 0){
       return -EDBERROR;
     }
