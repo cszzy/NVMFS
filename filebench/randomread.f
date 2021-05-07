@@ -4,7 +4,7 @@
 #
 
 set $dir=/mnt/pmem0/zzy/fs/mnt
-set $filesize=5g
+set $filesize=2g
 set $iosize=4k
 set $nthreads=1
 set $workingset=0

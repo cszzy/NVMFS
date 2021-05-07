@@ -12,28 +12,6 @@
 using namespace std;
 namespace metafs {
 
-//uint128转换为字符串
-// static inline void my_uint128_itoa(__uint128_t v, string& s){
-//     char temp;
-//     int i = 0, j;
-
-//     while(v > 0){
-//         s[i++] = v % 10 + '0';
-//         v /= 10;
-//     }
-//     s[i] = '\0';
-    
-//     j=0;
-//     i--;
-//     while(j < i){
-//         temp = s[j];
-//         s[j] = s[i];
-//         s[i] = temp;
-//         j++;
-//         i--;
-//     }
-// }
-
 const tfs_inode_header *GetInodeHeader(const std::string &value) {
   return reinterpret_cast<const tfs_inode_header*> (value.data());
 }
@@ -294,13 +272,6 @@ bool MetaFS::ParentPathLookup(const char *path, inode_id_t &parent_id, string &f
     
 }
 
-// string MetaFS::GetDiskFilePath(const inode_id_t &inode_id){
-//   string inode_id_str;
-//   my_uint128_itoa(inode_id, inode_id_str);
-//   string path = config_->GetDataDir() + "/" + inode_id_str;
-//   return path;
-// }
-
 string MetaFS::GetDiskFilePath(const inode_id_t &inode_id){
   string path = config_->GetDataDir() + "/" + std::to_string(inode_id);
   return path;
@@ -363,12 +334,13 @@ int MetaFS::TruncateDaosFile(const inode_id_t &key, off_t new_size) {
   int ret;
 
   config_->GetDaosObjId(&oid, key);
-  // ret = daos_obj_open(config_->coh, oid, DAOS_OO_RW, &oh, NULL);
-  // KVFS_LOG("daos_array_open_with_attr");
-  // ret = daos_array_open_with_attr(config_->coh, oid, DAOS_TX_NONE, DAOS_OO_RW, 1, FS_DEFAULT_CHUNK_SIZE, &oh, NULL);
+
   KVFS_LOG("daos_array_open");
   daos_size_t cell_size, chunk_size;
   ret = daos_array_open(config_->coh, oid, DAOS_TX_NONE, DAOS_OO_RW, &cell_size , &chunk_size, &oh, NULL);
+  KVFS_LOG("daos_array_open, oh:%lx", oh.cookie);
+  ret = daos_array_open(config_->coh, oid, DAOS_TX_NONE, DAOS_OO_RW, &cell_size , &chunk_size, &oh, NULL);
+  KVFS_LOG("daos_array_open, oh:%lx", oh.cookie);
   if(ret != 0){
     KVFS_LOG("error");
   }
@@ -417,7 +389,7 @@ ssize_t MetaFS::MigrateDaosFileToBuffer(const inode_id_t &key, char* buffer, siz
   }
 
   // ret = daos_obj_punch(oh, DAOS_TX_NONE, 0, NULL);
-  ret = daos_array_destroy(oh, Dao-DAOS_TX_NONE, NULL);
+  ret = daos_array_destroy(oh, DAOS_TX_NONE, NULL);
   if(ret){
     daos_array_close(oh, NULL);
     KVFS_LOG("error");
@@ -428,6 +400,38 @@ ssize_t MetaFS::MigrateDaosFileToBuffer(const inode_id_t &key, char* buffer, siz
     KVFS_LOG("error");
   }
   // assert(ret == 0);
+
+	return actual;
+}
+
+//先读取Daos obj到buffer，然后将daos obj删除
+ssize_t MetaFS::MigrateDaosFileToBuffer(const inode_id_t &key,daos_handle_t oh, char* buffer, size_t size) {
+  KVFS_LOG("MigrateDaosFileToBuffer:size:%llu",size);
+  // daos_obj_id_t oid;
+  ssize_t actual;
+	d_iov_t iov;
+	d_sg_list_t sgl;
+  int ret;
+
+  // config_->GetDaosObjId(&oid, key);
+
+	/** set memory location */
+	sgl.sg_nr = 1;
+	sgl.sg_nr_out = 0;
+	d_iov_set(&iov, buffer, size);
+	sgl.sg_iovs = &iov;
+
+	ret = ReadDaosArray(oh, &sgl, 0, &actual);
+	if(ret != 0){
+    KVFS_LOG("error");
+  }
+
+  // ret = daos_obj_punch(oh, DAOS_TX_NONE, 0, NULL);
+  ret = daos_array_destroy(oh, DAOS_TX_NONE, NULL);
+  if(ret){
+    daos_array_close(oh, NULL);
+    KVFS_LOG("error");
+  }
 
 	return actual;
 }
@@ -486,15 +490,6 @@ int MetaFS::MigrateToDaosFile(const inode_id_t &key, string &value, int flags) {
     d_iov_set(&iov, (void *)buffer, iheader->fstat.st_size);
     sgl.sg_iovs = &iov;
 
-    // ret = daos_obj_open(config_->coh, oid, DAOS_OO_RW, &oh, NULL);
-    // KVFS_LOG("daos_array_open_with_attr");
-    // ret = daos_array_open_with_attr(config_->coh, oid, DAOS_TX_NONE, DAOS_OO_RW, 1, FS_DEFAULT_CHUNK_SIZE, &oh, NULL);
-    // KVFS_LOG("daos_array_open");
-    // daos_size_t cell_size, chunk_size;
-    // ret = daos_array_open(config_->coh, oid, DAOS_TX_NONE, DAOS_OO_RW, &cell_size , &chunk_size, &oh, NULL);
-    // if(ret != 0){
-    //   KVFS_LOG("error");
-    // }
     KVFS_LOG("daos_array_create");
     ret = daos_array_create(config_->coh, oid, DAOS_TX_NONE, 1, FS_DEFAULT_CHUNK_SIZE, &oh, NULL);
     if(ret != 0){
@@ -514,6 +509,49 @@ int MetaFS::MigrateToDaosFile(const inode_id_t &key, string &value, int flags) {
 
     DropInlineData(value);
     
+  }
+  return ret;
+}
+
+int MetaFS::MigrateToDaosFile(const inode_id_t &key, string &value, int flags, daos_handle_t& oh) {
+  KVFS_LOG("MigrateToDaosFile");
+  const tfs_inode_header* iheader = GetInodeHeader(value);
+  int ret = 0;
+  if (iheader->fstat.st_size > 0 ) {
+    const char* buffer = (const char *) iheader +
+                         (TFS_INODE_HEADER_SIZE);
+    //write to daos, resize daos array, update stat->st_size
+    daos_obj_id_t oid;
+    d_iov_t iov;
+    d_sg_list_t sgl;
+    int ret;
+
+    config_->GetDaosObjId(&oid, key);
+
+    /** set memory location */
+    sgl.sg_nr = 1;
+    sgl.sg_nr_out = 0;
+    d_iov_set(&iov, (void *)buffer, iheader->fstat.st_size);
+    sgl.sg_iovs = &iov;
+
+    KVFS_LOG("daos_array_create");
+    ret = daos_array_create(config_->coh, oid, DAOS_TX_NONE, 1, FS_DEFAULT_CHUNK_SIZE, &oh, NULL);
+    if(ret != 0){
+      KVFS_LOG("error");
+    }
+
+    ret = WriteDaosArray(oh, &sgl, 0);
+    if(ret != 0){
+      KVFS_LOG("error");
+    }
+
+    // ret = daos_array_close(oh, NULL);
+    // if(ret != 0){
+    //   KVFS_LOG("error");
+    // }
+    // assert(ret == 0);
+
+    DropInlineData(value);
   }
   return ret;
 }
@@ -668,6 +706,8 @@ kvfs_file_handle * MetaFS::InitFileHandle(const char * path, struct fuse_file_in
        handle->key = key;
        handle->value = value;
        handle->flags = fi->flags;
+       handle->fd = 0;
+       handle->oh.cookie = 0;
        if( (fi->flags & O_RDWR) >0 ||
                (fi->flags & O_WRONLY) > 0 || 
                (fi->flags & O_TRUNC) > 0)
@@ -683,6 +723,20 @@ kvfs_file_handle * MetaFS::InitFileHandle(const char * path, struct fuse_file_in
            const tfs_inode_header *header = reinterpret_cast<const tfs_inode_header *>(value.data());
            if(header->has_blob > 0) // for big file , fill fd 
            {
+              // handle->fd = 1;
+              daos_handle_t oh;
+              daos_obj_id_t oid;
+
+              config_->GetDaosObjId(&oid, key);
+
+              // ret = daos_obj_open(config_->coh, oid, DAOS_OO_RO, &oh, NULL);
+              KVFS_LOG("daos_array_open");
+              daos_size_t cell_size, chunk_size;
+              int ret = daos_array_open(config_->coh, oid, DAOS_TX_NONE, DAOS_OO_RW, &cell_size , &chunk_size, &oh, NULL);
+              if(ret != 0){
+                KVFS_LOG("error");
+              }
+              handle->oh = oh;
               handle->fd = 1;
            }
            else // small file or dir 
@@ -727,14 +781,6 @@ int MetaFS::Read(const char * path,char * buf , size_t size ,off_t offset ,struc
     const tfs_inode_header *header = reinterpret_cast<const tfs_inode_header *>(handle->value.data());
     int ret = 0;
     if (header->has_blob > 0) {  //大文件 //daos
-      // if (handle->fd < 0) {
-      //   handle->fd = OpenDiskFile(key, header, handle->flags);
-      //   if (handle->fd < 0)
-      //     ret = -EBADF;
-      // }
-      // if (handle->fd >= 0) {
-      //   ret = pread(handle->fd, buf, size, offset);
-      // }
       daos_handle_t oh;
       ssize_t actual;
       d_iov_t iov;
@@ -743,15 +789,18 @@ int MetaFS::Read(const char * path,char * buf , size_t size ,off_t offset ,struc
 
       config_->GetDaosObjId(&oid, key);
 
-      // ret = daos_obj_open(config_->coh, oid, DAOS_OO_RO, &oh, NULL);
-      KVFS_LOG("daos_array_open");
-      daos_size_t cell_size, chunk_size;
-      ret = daos_array_open(config_->coh, oid, DAOS_TX_NONE, DAOS_OO_RW, &cell_size , &chunk_size, &oh, NULL);
-      if(ret != 0){
-        KVFS_LOG("error");
+      if(handle->fd < 1){
+        KVFS_LOG("daos_array_open");
+        daos_size_t cell_size, chunk_size;
+        ret = daos_array_open(config_->coh, oid, DAOS_TX_NONE, DAOS_OO_RW, &cell_size , &chunk_size, &oh, NULL);
+        if(ret != 0){
+          KVFS_LOG("error");
+        }
+        handle->oh = oh;
+        handle->fd = 1;
       }
-      handle->oh = oh;
-      handle->fd = 1;
+    
+      oh = handle->oh;
 
       /** set memory location */
       sgl.sg_nr = 1;
@@ -764,10 +813,10 @@ int MetaFS::Read(const char * path,char * buf , size_t size ,off_t offset ,struc
         KVFS_LOG("error");
       }     
 
-      ret = daos_array_close(oh, NULL);
-      if(ret != 0){
-        KVFS_LOG("error");
-      }  
+      // ret = daos_array_close(oh, NULL);
+      // if(ret != 0){
+      //   KVFS_LOG("error");
+      // }  
       // assert(ret == 0);
       return actual;
     } else { //小文件
@@ -785,14 +834,6 @@ int MetaFS::Write(const char * path , const char * buf,size_t size ,off_t offset
     bool has_larger_size = (header->fstat.st_size < offset + size);
     int ret = 0;
     if (header->has_blob > 0) {  //大文件
-      // if (handle->fd < 0) {
-      //   handle->fd = OpenDiskFile(key, header, handle->flags);
-      //   if (handle->fd < 0)
-      //     ret = -EBADF;
-      // }
-      // if (handle->fd >= 0) {
-      //   ret = pwrite(handle->fd, buf, size, offset);
-      // }
       daos_handle_t oh;
       ssize_t actual;
       d_iov_t iov;
@@ -801,17 +842,20 @@ int MetaFS::Write(const char * path , const char * buf,size_t size ,off_t offset
 
       config_->GetDaosObjId(&oid, key);
 
-      // ret = daos_obj_open(config_->coh, oid, DAOS_OO_RO, &oh, NULL);
-      KVFS_LOG("daos_array_open");
-      daos_size_t cell_size, chunk_size;
-      ret = daos_array_open(config_->coh, oid, DAOS_TX_NONE, DAOS_OO_RW, &cell_size , &chunk_size, &oh, NULL);
-      // KVFS_LOG("daos_array_create");
-      // ret = daos_array_create(config_->coh, oid, DAOS_TX_NONE, 1, FS_DEFAULT_CHUNK_SIZE, &oh, NULL);
-      if(ret != 0){
-        KVFS_LOG("error");
+      if(handle->fd < 1){
+        KVFS_LOG("daos_array_open");
+        daos_size_t cell_size, chunk_size;
+        ret = daos_array_open(config_->coh, oid, DAOS_TX_NONE, DAOS_OO_RW, &cell_size , &chunk_size, &oh, NULL);
+        // KVFS_LOG("daos_array_create");
+        // ret = daos_array_create(config_->coh, oid, DAOS_TX_NONE, 1, FS_DEFAULT_CHUNK_SIZE, &oh, NULL);
+        if(ret != 0){
+          KVFS_LOG("error");
+        }
+        handle->oh = oh;
+        handle->fd = 1;
       }
-      handle->oh = oh;
-      handle->fd = 1;
+
+      oh = handle->oh;
 
       /** set memory location */
       sgl.sg_nr = 1;
@@ -824,16 +868,6 @@ int MetaFS::Write(const char * path , const char * buf,size_t size ,off_t offset
         KVFS_LOG("error");
       }
       
-      // if (ret >= 0 && has_larger_size > 0 ) {
-      //   tfs_inode_header new_iheader = *GetInodeHeader(handle->value);
-      //   new_iheader.fstat.st_size = offset + size;
-      //   UpdateInodeHeader(handle->value, new_iheader);
-      //   int ret = db_->InodePut(key, handle->value);
-      //   if(ret != 0){
-      //     KVFS_LOG("error");
-      //     return -EDBERROR;
-      //   }
-      // }
       if (ret >= 0) {
         tfs_inode_header new_iheader = *GetInodeHeader(handle->value);
         new_iheader.fstat.st_size = offset + size;
@@ -858,12 +892,6 @@ int MetaFS::Write(const char * path , const char * buf,size_t size ,off_t offset
       //1 . write data to buffer
       memcpy (buffer + offset , buf, size);
       //2. write buffer to file
-      // int fd = OpenDiskFile(key, header, handle->flags);
-      // if(fd < 0){
-      //   delete [] buffer;
-      //   return fd;
-      // }
-      // ret = pwrite(fd,buffer,offset+size,0);
       daos_handle_t oh;
       ssize_t actual;
       d_iov_t iov;
@@ -880,7 +908,8 @@ int MetaFS::Write(const char * path , const char * buf,size_t size ,off_t offset
       if(ret != 0){
           KVFS_LOG("error,ret:%d", ret);
       }
-      // handle->oh = oh;
+      handle->oh = oh;
+      handle->fd = 1;
 
       /** set memory location */
       sgl.sg_nr = 1;
@@ -893,10 +922,10 @@ int MetaFS::Write(const char * path , const char * buf,size_t size ,off_t offset
         KVFS_LOG("error");
       }
       ret = size;
-      int rc = daos_array_close(oh, NULL);
-      if(rc != 0){
-        KVFS_LOG("error");
-      }
+      // int rc = daos_array_close(oh, NULL);
+      // if(rc != 0){
+      //   KVFS_LOG("error");
+      // }
       //3 . delete tmp buffer
       
       delete [] buffer;
@@ -918,12 +947,6 @@ int MetaFS::Write(const char * path , const char * buf,size_t size ,off_t offset
     } else {
       UpdateInlineData(handle->value, buf, offset, size);
       ret = size;
-      //直接更新size，不知道会不会出bug
-      // if(has_larger_size){
-      //   tfs_inode_header new_iheader = *GetInodeHeader(handle->value);
-      //   new_iheader.fstat.st_size = offset + size;
-      //   UpdateInodeHeader(handle->value, new_iheader);
-      // }
       tfs_inode_header new_iheader = *GetInodeHeader(handle->value);
       new_iheader.fstat.st_size = offset + size;
       UpdateInodeHeader(handle->value, new_iheader);
@@ -940,64 +963,77 @@ int MetaFS::Write(const char * path , const char * buf,size_t size ,off_t offset
 //zzy:裁剪文件变为offset大小，参考dfuse_truncate
 int MetaFS::Truncate(const char * path ,off_t offset, struct fuse_file_info *fi){
   KVFS_LOG("Truncate:%s %d\n", path, offset);
-  inode_id_t key;
-  if (!PathLookup(path, key)) {
-      KVFS_LOG("Truncate: No such file or directory %s\n", path);
-      return -errno;
-  }
-    off_t new_size = offset;
-    string value;
-    int ret = db_->InodeGet(key, value);
-    if(ret == 0){  //该文件存在
-      const tfs_inode_header *iheader = reinterpret_cast<const tfs_inode_header *>(value.data());
+  kvfs_file_handle *handle = reinterpret_cast<kvfs_file_handle *>(fi->fh);
+  inode_id_t key = handle->key;
 
-      if (iheader->has_blob > 0) {//daos中
-        if (new_size > config_->GetThreshold()) {//裁剪后文件大小仍然大于阈值，仍然存储在daos中，参考dfuse_truncate
-          // TruncateDiskFile(key,new_size);
-          TruncateDaosFile(key, new_size);
-        } else {//裁剪后的大小小于阈值，需要将daos中数据读出迁移到Itable中，删除daos中的数据
-          char* buffer = new char[new_size];
-          // MigrateDiskFileToBuffer(key, buffer, new_size);
-          MigrateDaosFileToBuffer(key, buffer, new_size);
-          UpdateInlineData(value, buffer, 0, new_size);
-          delete [] buffer;
-        }
-      } else {
-        if (new_size > config_->GetThreshold()) {//裁剪后大小大于阈值，将数据从Itable迁移到daos
-          // int fd;
-          // if (MigrateToDiskFile(key, value, fd, O_TRUNC|O_WRONLY) == 0) {
-          //   if ((ret = ftruncate(fd, new_size)) == 0) {
-          //     fsync(fd);
-          //   }
-          //   close(fd);
-          // }
-          MigrateToDaosFile(key, value, O_TRUNC|O_WRONLY);
-        } else {
-          TruncateInlineData(value, new_size);
-        }
-      }
+  off_t new_size = offset;
+  string value;
+  int ret = db_->InodeGet(key, value);
+  if(ret == 0){  //该文件存在
+    const tfs_inode_header *iheader = reinterpret_cast<const tfs_inode_header *>(value.data());
 
-      //update stat
-      if (new_size != iheader->fstat.st_size) {
-        tfs_inode_header new_iheader = *GetInodeHeader(value);
-        new_iheader.fstat.st_size = new_size;
-        if (new_size > config_->GetThreshold()) {
-          new_iheader.has_blob = 1;
-        } else {
-          new_iheader.has_blob = 0;
+    if (iheader->has_blob > 0) {//daos中
+      daos_handle_t oh;
+
+      if(handle->fd < 1){
+        daos_obj_id_t oid;
+        config_->GetDaosObjId(&oid, key);
+        KVFS_LOG("daos_array_open");
+        daos_size_t cell_size, chunk_size;
+        ret = daos_array_open(config_->coh, oid, DAOS_TX_NONE, DAOS_OO_RW, &cell_size , &chunk_size, &oh, NULL);
+        if(ret != 0){
+          KVFS_LOG("error");
         }
-        UpdateInodeHeader(value, new_iheader);
-      }
-      int ret = db_->InodePut(key, value);
-      if(ret != 0){
-        return -EDBERROR;
+        handle->oh = oh;
+        handle->fd = 1;
       }
       
-    } else if (ret == 1){  //该文件不存在
-      return -ENOENT;
+      oh = handle->oh;
+
+      if (new_size > config_->GetThreshold()) {//裁剪后文件大小仍然大于阈值，仍然存储在daos中，参考dfuse_truncate
+        ret = daos_array_set_size(oh, DAOS_TX_NONE, new_size, NULL);
+        if(ret){
+          daos_array_close(oh, NULL);
+          KVFS_LOG("error");
+        }
+      } else {//裁剪后的大小小于阈值，需要将daos中数据读出迁移到Itable中，删除daos中的数据
+        char* buffer = new char[new_size];
+        MigrateDaosFileToBuffer(key, oh, buffer, new_size);
+        UpdateInlineData(value, buffer, 0, new_size);
+        handle->fd = 0;
+        delete [] buffer;
+      }
     } else {
-        return -EDBERROR;
+      if (new_size > config_->GetThreshold()) {//裁剪后大小大于阈值，将数据从Itable迁移到daos
+        // MigrateToDaosFile(key, value, O_TRUNC|O_WRONLY);
+        MigrateToDaosFile(key, value, O_TRUNC|O_WRONLY, handle->oh);
+        handle->fd = 1;
+      } else {
+        TruncateInlineData(value, new_size);
+      }
     }
+
+    //update stat
+    if (new_size != iheader->fstat.st_size) {
+      tfs_inode_header new_iheader = *GetInodeHeader(value);
+      new_iheader.fstat.st_size = new_size;
+      if (new_size > config_->GetThreshold()) {
+        new_iheader.has_blob = 1;
+      } else {
+        new_iheader.has_blob = 0;
+      }
+      UpdateInodeHeader(value, new_iheader);
+    }
+    int ret = db_->InodePut(key, value);
+    if(ret != 0){
+      return -EDBERROR;
+    }
+    
+  } else if (ret == 1){  //该文件不存在
+    return -ENOENT;
+  } else {
+      return -EDBERROR;
+  }
 
   return ret;
 }
@@ -1043,14 +1079,13 @@ int MetaFS::Release(const char * path ,struct fuse_file_info * fi){
   }
 
   int ret = 0;
-  // if (handle->fd >= 0) {
-  //   // ret = close(handle->fd);
-  //   KVFS_LOG("daos_array_close");
-  //   ret = daos_array_close(handle->oh, NULL);
-  //   if(ret) {
-  //     KVFS_LOG("error");
-  //   }
-  // }
+  if (handle->fd > 0) {
+    KVFS_LOG("daos_array_close");
+    ret = daos_array_close(handle->oh, NULL);
+    if(ret) {
+      KVFS_LOG("error");
+    }
+  }
   ret = db_->InodePut(key, handle->value);
   if(ret != 0){
     return -EDBERROR;
@@ -1103,7 +1138,7 @@ int MetaFS::Symlink(const char * target , const char * path){
   ret = db_->InodeGet(key, value);
   if(ret == 0){
     UpdateInlineData(value, target, 0, strlen(target));
-    ret = db_->InodePut(key.ToSlice(), value);
+    ret = db_->InodePut(key, value);
     if(ret != 0){
       return -EDBERROR;
     }

@@ -14,7 +14,7 @@ if [ -n "$datadir" ];then
     rm -f $datadir/*
 fi
 
-cmd="./tablefs_main -mount_dir $mountdir -meta_dir $metadir -data_dir $datadir -pool $pool -container $container"
+cmd="./rockfs_main -mount_dir $mountdir -meta_dir $metadir -data_dir $datadir -pool $pool -container $container"
 
 echo $cmd
 eval $cmd

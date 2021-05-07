@@ -4,10 +4,10 @@
 #
 
 set $dir=/mnt/pmem0/zzy/fs/mnt
-set $nfiles=50000
+set $nfiles=40000
 set $meandirwidth=10
-set $filesize=64k
-set $iosize=64k
+set $filesize=16k
+set $iosize=16k
 set $nthreads=1
 
 define fileset name=bigfileset,path=$dir,size=$filesize,entries=$nfiles,dirwidth=$meandirwidth,prealloc=80

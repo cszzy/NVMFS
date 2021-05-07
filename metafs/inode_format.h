@@ -54,7 +54,7 @@ struct kvfs_file_handle
     int flags;
     kvfs_inode_mode mode;
     // file descriptor for big file
-    int fd; 
+    int fd; //0：DAOS中，oh无效 1：DAOS中,oh有效 -1：小文件
     //daos obj handle
     daos_handle_t oh;
     std::string value;

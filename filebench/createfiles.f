@@ -7,8 +7,8 @@
 set $dir=/mnt/pmem0/zzy/fs/mnt
 set $nfiles=100000
 set $meandirwidth=10
-set $meanfilesize=1k
-set $iosize=1k
+set $meanfilesize=4k
+set $iosize=4k
 set $nthreads=1
 
 set mode quit firstdone

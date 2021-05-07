@@ -90,6 +90,9 @@ protected:
     int MigrateToDaosFile(const inode_id_t &key, string &value, int flags);
     int WriteDaosArray(daos_handle_t oh, d_sg_list_t *sgl, daos_off_t offset);
 
+    ssize_t MigrateDaosFileToBuffer(const inode_id_t &key,daos_handle_t oh, char* buffer, size_t size);
+    int MigrateToDaosFile(const inode_id_t &key, string &value, int flags, daos_handle_t& oh);
+
     DBAdaptor * db_;
     KVFSConfig * config_;
     kvfs_args args_;
