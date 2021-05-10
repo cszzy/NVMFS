@@ -1076,7 +1076,7 @@ int MetaFS::Readlink(const char * path ,char * buf,size_t size){
   int ret = 0;
   ret = db_->InodeGet(key, result);
   if(ret == 0){
-    size_t data_size = GetInlineData(result, buf, 0, size-1);
+    size_t data_size = GetInlineData(result, buf, 0, size);
     buf[data_size] = '\0';
     return 0;
   } else if(ret == 1){
@@ -1087,28 +1087,55 @@ int MetaFS::Readlink(const char * path ,char * buf,size_t size){
 }
 
 //zzy
-int MetaFS::Symlink(const char * target , const char * path){
-  // KVFS_LOG("Symlink:not implement");
-  // return -ENOTIMPLEMENT;
-  KVFS_LOG("Symlink: path:%s, target:%s.", path, target);
-  inode_id_t key;
+int MetaFS::Symlink(const char * from , const char * to){
+  // // KVFS_LOG("Symlink:not implement");
+  // // return -ENOTIMPLEMENT;
+  // KVFS_LOG("Symlink: to:%s, from:%s.", to, from);
+  // inode_id_t key;
+  // inode_id_t parent_id;
+  // string fname;
+  // if (!PathLookup(to, key, parent_id, fname)) {
+  //   KVFS_LOG("Symlink: No such file or directory %s\n", to);
+  //   return -errno;
+  // }
+  // std::string value;
+  // int ret = 0;
+  // ret = db_->InodeGet(key, value);
+  // if(ret == 0){
+  //   UpdateInlineData(value, from, 0, strlen(from));
+  //   ret = db_->InodePut(key, value);
+  //   if(ret != 0){
+  //     return -EDBERROR;
+  //   }
+  // }
+  // return ret;
+  KVFS_LOG("Symlink:from:%s, to:%s", from, to);
   inode_id_t parent_id;
-  string fname;
-  if (!PathLookup(path, key, parent_id, fname)) {
+  string filename;
+  if (!ParentPathLookup(to, parent_id, filename)) {
     KVFS_LOG("Symlink: No such file or directory %s\n", path);
     return -errno;
   }
-  std::string value;
-  int ret = 0;
-  ret = db_->InodeGet(key, value);
-  if(ret == 0){
-    UpdateInlineData(value, target, 0, strlen(target));
-    ret = db_->InodePut(key, value);
-    if(ret != 0){
-      return -EDBERROR;
-    }
+
+  inode_id_t key;
+  config_->GetObjId(key);
+  struct stat statbuf;
+  lstat(ROOT_INODE_STAT, &statbuf);
+  string value = InitInodeValue(key, S_IFLNK, statbuf.st_dev);
+  UpdateInlineData(value, from, 0, strlen(from));
+  int ret=db_->DirPut(parent_id, filename, key);
+  if(ret != 0){
+    KVFS_LOG("Symlink dirput error: %d %s %d\n", parent_id, filename.c_str(), key);
+    return -EDBERROR;
   }
-  return ret;
+
+  ret = db_->InodePut(key, value);
+  if(ret != 0){
+    KVFS_LOG("Symlink inodeput error: %d %s %d\n", parent_id, filename.c_str(), key);
+    return -EDBERROR;
+  }
+
+  return 0;
 }
 
 //zzy:删除文件
