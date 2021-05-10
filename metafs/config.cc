@@ -20,7 +20,21 @@ KVFSConfig::KVFSConfig():
 //zzy:todo是否销毁pool和cont
 KVFSConfig::~KVFSConfig()
 {
-
+    std::fstream fs;
+    fs.open(data_dir +"/" + config_file_name, std::ios::in);
+    if(fs.is_open())
+    {
+        KVFS_LOG("find a config file ...");
+        // write open
+        fs.open(data_dir +"/" + config_file_name, std::ios::out);
+        fs << current_inode_size ;
+        fs.close();
+    }
+    else  //find config file
+    {
+        KVFS_LOG("cant find config file ");
+        fs.close();
+    }
 }
 
 void KVFSConfig::Init(const kvfs_args & args)

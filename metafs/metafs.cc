@@ -615,7 +615,7 @@ void* MetaFS::Init(struct fuse_conn_info *conn, struct fuse_config *cfg){
 void MetaFS::Destroy(void * data){
   KVFS_LOG("FS Destroy\n");
   db_->Cleanup();
-  delete db_;
+  // delete db_;
   int ret;
   KVFS_LOG("Daos cont close");
   ret = daos_cont_close(config_->coh, NULL);
