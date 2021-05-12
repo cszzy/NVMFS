@@ -339,8 +339,8 @@ int MetaFS::TruncateDaosFile(const inode_id_t &key, off_t new_size) {
   daos_size_t cell_size, chunk_size;
   ret = daos_array_open(config_->coh, oid, DAOS_TX_NONE, DAOS_OO_RW, &cell_size , &chunk_size, &oh, NULL);
   KVFS_LOG("daos_array_open, oh:%lx", oh.cookie);
-  ret = daos_array_open(config_->coh, oid, DAOS_TX_NONE, DAOS_OO_RW, &cell_size , &chunk_size, &oh, NULL);
-  KVFS_LOG("daos_array_open, oh:%lx", oh.cookie);
+  // ret = daos_array_open(config_->coh, oid, DAOS_TX_NONE, DAOS_OO_RW, &cell_size , &chunk_size, &oh, NULL);
+  // KVFS_LOG("daos_array_open, oh:%lx", oh.cookie);
   if(ret != 0){
     KVFS_LOG("error");
   }

@@ -43,7 +43,7 @@ struct tfs_meta_key_t
 
 struct tfs_inode_header {
   tfs_stat_t fstat;
-  char padding[INODE_PADDING];
+//   char padding[INODE_PADDING];
   uint32_t has_blob;
   uint32_t namelen;
 };
