@@ -3,7 +3,7 @@
 
 #define FUSE_USE_VERSION 35
 
-#include <fuse.h>
+#include <fuse3/fuse.h>
 #include "inode_format.h"
 #include "adaptor.h"
 #include "config.h"

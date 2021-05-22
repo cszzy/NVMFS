@@ -5,6 +5,7 @@
 #include <string>
 #include <unordered_map>
 #include <sys/stat.h>
+#include <atomic>
 
 #include <daos.h>
 
@@ -68,7 +69,7 @@ protected:
     std::string meta_dir;
     std::string data_dir;
     std::string mount_dir;
-    uint64_t current_inode_size;
+    std::atomic<uint64_t> current_inode_size;
 
     uint64_t threshold;
 
