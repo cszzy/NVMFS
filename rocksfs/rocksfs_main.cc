@@ -128,7 +128,7 @@ int main(int argc , char * argv[])
     char fuse_mount_dir[100];
     strcpy(fuse_mount_dir , mountdir.c_str());
     fuse_argv[fuse_argc++] = fuse_mount_dir;
-    char fuse_opt_s[20] = "-s";  //-s disable multi-threaded operation
+    // char fuse_opt_s[20] = "-s";  //-s disable multi-threaded operation
     fuse_argv[fuse_argc++] = fuse_opt_s;
 
     kvfs_operations.init = wrap_init;
